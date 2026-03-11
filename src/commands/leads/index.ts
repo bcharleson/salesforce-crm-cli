@@ -1,0 +1,35 @@
+import { createSObjectCommands } from '../../factories/sobject.js';
+
+export const allLeadsCommands = createSObjectCommands({
+  objectType: 'Lead',
+  group: 'leads',
+  singular: 'lead',
+  defaultFields: [
+    'Id', 'FirstName', 'LastName', 'Email', 'Phone', 'Company',
+    'Title', 'Status', 'LeadSource', 'Industry', 'Rating',
+    'OwnerId', 'IsConverted', 'CreatedDate', 'LastModifiedDate',
+  ],
+  writeProperties: [
+    { field: 'LastName', flags: '--last-name <name>', description: 'Last name', required: true },
+    { field: 'Company', flags: '-c, --company <company>', description: 'Company name', required: true },
+    { field: 'FirstName', flags: '--first-name <name>', description: 'First name' },
+    { field: 'Email', flags: '-e, --email <email>', description: 'Email address' },
+    { field: 'Phone', flags: '--phone <phone>', description: 'Phone number' },
+    { field: 'MobilePhone', flags: '--mobile <phone>', description: 'Mobile phone' },
+    { field: 'Title', flags: '--title <title>', description: 'Job title' },
+    { field: 'Status', flags: '--status <status>', description: 'Lead status (e.g., Open, Working, Closed)' },
+    { field: 'LeadSource', flags: '--lead-source <source>', description: 'Lead source' },
+    { field: 'Industry', flags: '--industry <industry>', description: 'Industry' },
+    { field: 'Rating', flags: '--rating <rating>', description: 'Rating (Hot, Warm, Cold)' },
+    { field: 'AnnualRevenue', flags: '--annual-revenue <amount>', description: 'Annual revenue' },
+    { field: 'NumberOfEmployees', flags: '--employees <count>', description: 'Number of employees' },
+    { field: 'Street', flags: '--street <street>', description: 'Street address' },
+    { field: 'City', flags: '--city <city>', description: 'City' },
+    { field: 'State', flags: '--state <state>', description: 'State/Province' },
+    { field: 'PostalCode', flags: '--postal-code <zip>', description: 'Postal code' },
+    { field: 'Country', flags: '--country <country>', description: 'Country' },
+    { field: 'Website', flags: '--website <url>', description: 'Website URL' },
+    { field: 'Description', flags: '--description <text>', description: 'Description' },
+    { field: 'OwnerId', flags: '--owner-id <id>', description: 'Owner user ID' },
+  ],
+});

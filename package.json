@@ -1,0 +1,55 @@
+{
+  "name": "salesforce-cli",
+  "version": "0.1.0",
+  "description": "CLI and MCP server for the Salesforce REST API — accounts, contacts, leads, opportunities, SOQL, bulk operations, and more",
+  "type": "module",
+  "bin": {
+    "salesforce": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "AGENTS.md",
+    "CLAUDE.md"
+  ],
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "salesforce",
+    "crm",
+    "soql",
+    "sobject",
+    "leads",
+    "opportunities",
+    "contacts",
+    "accounts",
+    "bulk-api",
+    "cli",
+    "mcp",
+    "ai-agent",
+    "automation"
+  ],
+  "author": "Brandon Charleson",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^8.3.0",
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "commander": "^14.0.3",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
