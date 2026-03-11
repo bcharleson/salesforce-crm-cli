@@ -1,5 +1,5 @@
 {
-  "name": "salesforce-cli",
+  "name": "@bcharleson/salesforce-cli",
   "version": "0.1.0",
   "description": "CLI and MCP server for the Salesforce REST API — accounts, contacts, leads, opportunities, SOQL, bulk operations, and more",
   "type": "module",
