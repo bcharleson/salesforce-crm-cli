@@ -1,6 +1,6 @@
 {
   "name": "salesforce-crm-cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "CLI and MCP server for the Salesforce REST API — accounts, contacts, leads, opportunities, SOQL, bulk operations, and more",
   "type": "module",
   "bin": {
@@ -8,6 +8,7 @@
   },
   "files": [
     "dist",
+    "README.md",
     "AGENTS.md",
     "CLAUDE.md"
   ],
