@@ -6,7 +6,7 @@ export const allAccountsCommands = createSObjectCommands({
   singular: 'account',
   defaultFields: [
     'Id', 'Name', 'Type', 'Industry', 'Phone', 'Website',
-    'BillingCity', 'BillingState', 'AnnualRevenue', 'NumberOfEmployees',
+    'BillingCity', 'BillingState', 'NumberOfEmployees',
     'OwnerId', 'CreatedDate', 'LastModifiedDate',
   ],
   writeProperties: [

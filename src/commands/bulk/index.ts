@@ -57,13 +57,15 @@ const bulkIngestUploadCommand: CommandDefinition = {
 
   inputSchema: z.object({
     jobId: z.string().describe('Bulk job ID'),
-    csv: z.string().describe('CSV data string (header row + data rows)'),
+    csv: z.string().optional().describe('CSV data string (header row + data rows). Use this OR --csv-file.'),
+    csvFile: z.string().optional().describe('Path to a CSV file on disk. Use this OR --csv.'),
   }),
 
   cliMappings: {
     options: [
       { field: 'jobId', flags: '--job-id <id>', description: 'Bulk job ID' },
-      { field: 'csv', flags: '--csv <data>', description: 'CSV data (header + rows)' },
+      { field: 'csv', flags: '--csv <data>', description: 'Inline CSV data (header + rows)' },
+      { field: 'csvFile', flags: '--csv-file <path>', description: 'Path to a CSV file on disk' },
     ],
   },
 
@@ -71,20 +73,21 @@ const bulkIngestUploadCommand: CommandDefinition = {
   fieldMappings: { jobId: 'path' },
 
   handler: async (input, client) => {
-    // Bulk upload needs raw CSV, not JSON — use custom request
-    const path = `/services/data/v62.0/jobs/ingest/${encodeURIComponent(input.jobId)}/batches`;
-    const response = await fetch(`${(client as any).instanceUrl ?? ''}${path}`, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${(client as any).accessToken ?? ''}`,
-        'Content-Type': 'text/csv',
-      },
-      body: input.csv,
-    });
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Upload failed: ${error}`);
+    let csvData = input.csv as string | undefined;
+    if (!csvData && input.csvFile) {
+      const { readFile } = await import('node:fs/promises');
+      csvData = await readFile(input.csvFile as string, 'utf-8');
     }
+    if (!csvData) {
+      throw new Error('Either --csv or --csv-file is required');
+    }
+    await client.requestRaw<void>({
+      method: 'PUT',
+      path: `/jobs/ingest/${encodeURIComponent(input.jobId)}/batches`,
+      body: csvData,
+      contentType: 'text/csv',
+      accept: 'application/json',
+    });
     return { status: 'uploaded', jobId: input.jobId };
   },
 };

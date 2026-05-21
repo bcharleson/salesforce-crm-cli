@@ -55,11 +55,24 @@ export interface CommandDefinition<TInput extends z.ZodObject<any> = z.ZodObject
 }
 
 export interface SalesforceClient {
+  readonly instanceUrl: string;
+  readonly apiVersion: string;
+
   request<T>(options: {
     method: 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'PUT';
     path: string;
     query?: Record<string, string | number | boolean | undefined>;
     body?: unknown;
+    rawPath?: boolean;
+  }): Promise<T>;
+
+  /** Issue a request with a raw textual body and explicit content-type (e.g., CSV uploads). */
+  requestRaw<T>(options: {
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'PUT';
+    path: string;
+    body: string;
+    contentType: string;
+    accept?: string;
     rawPath?: boolean;
   }): Promise<T>;
 

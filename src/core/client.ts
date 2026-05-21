@@ -11,7 +11,16 @@ import {
 const MAX_RETRIES = 3;
 const REQUEST_TIMEOUT = 30_000;
 const WRITE_TIMEOUT = 15_000;
-const VERSION = '0.1.0';
+const VERSION = '0.1.3';
+
+export interface RefreshCredentials {
+  refreshToken: string;
+  clientId: string;
+  clientSecret?: string;
+  loginUrl?: string;
+}
+
+export type TokenUpdateListener = (newAccessToken: string) => void | Promise<void>;
 
 interface ClientOptions {
   accessToken: string;
@@ -19,26 +28,80 @@ interface ClientOptions {
   apiVersion: string;
   maxRetries?: number;
   timeout?: number;
+  refresh?: RefreshCredentials;
+  onTokenRefreshed?: TokenUpdateListener;
 }
 
 export class SalesforceClient implements ISalesforceClient {
   private accessToken: string;
-  private instanceUrl: string;
-  private apiVersion: string;
+  private _instanceUrl: string;
+  private _apiVersion: string;
   private maxRetries: number;
   private timeout: number;
+  private refresh?: RefreshCredentials;
+  private onTokenRefreshed?: TokenUpdateListener;
 
   constructor(options: ClientOptions) {
     this.accessToken = options.accessToken;
-    this.instanceUrl = options.instanceUrl.replace(/\/$/, '');
-    this.apiVersion = options.apiVersion;
+    this._instanceUrl = options.instanceUrl.replace(/\/$/, '');
+    this._apiVersion = options.apiVersion;
     this.maxRetries = options.maxRetries ?? MAX_RETRIES;
     this.timeout = options.timeout ?? REQUEST_TIMEOUT;
+    this.refresh = options.refresh;
+    this.onTokenRefreshed = options.onTokenRefreshed;
+  }
+
+  get instanceUrl(): string {
+    return this._instanceUrl;
+  }
+
+  get apiVersion(): string {
+    return this._apiVersion;
   }
 
   /** Build the full base path: /services/data/v62.0 */
   private get basePath(): string {
-    return `/services/data/${this.apiVersion}`;
+    return `/services/data/${this._apiVersion}`;
+  }
+
+  private buildHeaders(extra?: Record<string, string>): Record<string, string> {
+    return {
+      Authorization: `Bearer ${this.accessToken}`,
+      'User-Agent': `salesforce-cli/${VERSION}`,
+      ...(extra ?? {}),
+    };
+  }
+
+  private async refreshAccessToken(): Promise<boolean> {
+    if (!this.refresh) return false;
+
+    const loginUrl = (this.refresh.loginUrl ?? 'https://login.salesforce.com').replace(/\/$/, '');
+    const params = new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: this.refresh.clientId,
+      refresh_token: this.refresh.refreshToken,
+    });
+    if (this.refresh.clientSecret) {
+      params.set('client_secret', this.refresh.clientSecret);
+    }
+
+    try {
+      const response = await fetch(`${loginUrl}/services/oauth2/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
+      });
+      if (!response.ok) return false;
+      const data = (await response.json()) as { access_token?: string };
+      if (!data.access_token) return false;
+      this.accessToken = data.access_token;
+      if (this.onTokenRefreshed) {
+        await this.onTokenRefreshed(data.access_token);
+      }
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async request<T>(options: {
@@ -48,58 +111,107 @@ export class SalesforceClient implements ISalesforceClient {
     body?: unknown;
     rawPath?: boolean;
   }): Promise<T> {
-    // rawPath = true means path is already fully qualified (e.g., nextRecordsUrl)
-    const fullPath = options.rawPath ? options.path : `${this.basePath}${options.path}`;
-    const url = new URL(this.instanceUrl + fullPath);
+    return this.doRequest<T>({
+      method: options.method,
+      path: options.path,
+      query: options.query,
+      jsonBody: options.body,
+      rawPath: options.rawPath,
+    });
+  }
 
-    if (options.query) {
-      for (const [key, value] of Object.entries(options.query)) {
+  async requestRaw<T>(options: {
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'PUT';
+    path: string;
+    body: string;
+    contentType: string;
+    accept?: string;
+    rawPath?: boolean;
+  }): Promise<T> {
+    return this.doRequest<T>({
+      method: options.method,
+      path: options.path,
+      rawBody: options.body,
+      contentType: options.contentType,
+      accept: options.accept,
+      rawPath: options.rawPath,
+    });
+  }
+
+  private async doRequest<T>(opts: {
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'PUT';
+    path: string;
+    query?: Record<string, string | number | boolean | undefined>;
+    jsonBody?: unknown;
+    rawBody?: string;
+    contentType?: string;
+    accept?: string;
+    rawPath?: boolean;
+  }): Promise<T> {
+    const fullPath = opts.rawPath ? opts.path : `${this.basePath}${opts.path}`;
+    const url = new URL(this._instanceUrl + fullPath);
+
+    if (opts.query) {
+      for (const [key, value] of Object.entries(opts.query)) {
         if (value !== undefined && value !== null && value !== '') {
           url.searchParams.set(key, String(value));
         }
       }
     }
 
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${this.accessToken}`,
-      'User-Agent': `salesforce-cli/${VERSION}`,
-    };
-
-    if (options.body !== undefined) {
-      headers['Content-Type'] = 'application/json';
-    }
+    const hasBody = opts.jsonBody !== undefined || opts.rawBody !== undefined;
+    const isWrite = opts.method !== 'GET';
+    const effectiveTimeout = isWrite ? Math.min(this.timeout, WRITE_TIMEOUT) : this.timeout;
 
     let lastError: Error | undefined;
-    const isWrite = options.method !== 'GET';
-    const effectiveTimeout = isWrite ? Math.min(this.timeout, WRITE_TIMEOUT) : this.timeout;
+    let didRefresh = false;
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), effectiveTimeout);
 
+        const headers = this.buildHeaders();
+        if (hasBody) {
+          headers['Content-Type'] =
+            opts.contentType ?? (opts.jsonBody !== undefined ? 'application/json' : 'application/octet-stream');
+        }
+        if (opts.accept) headers['Accept'] = opts.accept;
+
+        const body = opts.rawBody !== undefined
+          ? opts.rawBody
+          : opts.jsonBody !== undefined
+          ? JSON.stringify(opts.jsonBody)
+          : undefined;
+
         const response = await fetch(url.toString(), {
-          method: options.method,
+          method: opts.method,
           headers,
-          body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+          body,
           signal: controller.signal,
         });
 
         clearTimeout(timeoutId);
 
         if (response.ok) {
-          // 204 No Content
           if (response.status === 204) return undefined as T;
           const text = await response.text();
           if (!text) return undefined as T;
-          return JSON.parse(text) as T;
+          // Honor non-JSON accept: callers using requestRaw with accept !== application/json get text
+          if (opts.accept && !opts.accept.includes('json')) {
+            return text as unknown as T;
+          }
+          try {
+            return JSON.parse(text) as T;
+          } catch {
+            return text as unknown as T;
+          }
         }
 
         const errorBody = await response.text().catch(() => '');
         let errorMessage: string;
         try {
           const parsed = JSON.parse(errorBody);
-          // Salesforce returns errors as an array: [{ message, errorCode, fields }]
           if (Array.isArray(parsed) && parsed.length > 0) {
             errorMessage = parsed.map((e: any) => `${e.errorCode}: ${e.message}`).join('; ');
           } else {
@@ -110,7 +222,17 @@ export class SalesforceClient implements ISalesforceClient {
         }
 
         switch (response.status) {
-          case 401:
+          case 401: {
+            // Try one refresh-token retry before giving up
+            if (!didRefresh && this.refresh) {
+              const ok = await this.refreshAccessToken();
+              if (ok) {
+                didRefresh = true;
+                continue;
+              }
+            }
+            throw new AuthError(errorMessage);
+          }
           case 403:
             throw new AuthError(errorMessage);
           case 404:
@@ -152,7 +274,7 @@ export class SalesforceClient implements ISalesforceClient {
 
         if (isAbort) {
           lastError = new SalesforceError(
-            `Request timed out after ${effectiveTimeout / 1000}s: ${options.method} ${options.path}`,
+            `Request timed out after ${effectiveTimeout / 1000}s: ${opts.method} ${opts.path}`,
             'TIMEOUT',
           );
           if (!isWrite && attempt < this.maxRetries) {

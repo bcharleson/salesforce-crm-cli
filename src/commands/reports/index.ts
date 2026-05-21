@@ -67,11 +67,18 @@ const reportsRunCommand: CommandDefinition = {
   fieldMappings: { reportId: 'path' },
 
   handler: async (input, client) => {
-    const body: Record<string, any> = {};
-    if (input.filters) {
-      body.reportFilters = JSON.parse(input.filters);
+    const path = `/analytics/reports/${encodeURIComponent(input.reportId)}`;
+
+    if (!input.filters) {
+      // GET runs the report with saved metadata; POST requires reportMetadata in the body.
+      return client.get(path);
     }
-    return client.post(`/analytics/reports/${encodeURIComponent(input.reportId)}`, body);
+
+    return client.post(path, {
+      reportMetadata: {
+        reportFilters: JSON.parse(input.filters),
+      },
+    });
   },
 };
 
