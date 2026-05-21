@@ -6,8 +6,7 @@ import { resolveAuth } from '../core/auth.js';
 import { SalesforceClient } from '../core/client.js';
 import { saveConfig, deleteConfig } from '../core/config.js';
 import type { SalesforceConfig } from '../core/types.js';
-
-const VERSION = '0.1.4';
+import { VERSION } from '../version.js';
 
 export async function startMcpServer(): Promise<void> {
   const server = new McpServer({

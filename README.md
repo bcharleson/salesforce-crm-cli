@@ -70,6 +70,28 @@ salesforce status        # Show current auth info
 salesforce limits get    # Check API limits for your org
 ```
 
+### Verify install & upgrade
+
+Confirm the CLI version matches npm after installing or upgrading:
+
+```bash
+npm view salesforce-crm-cli version   # latest on npm
+salesforce --version                  # should match
+which salesforce                      # path to the active binary
+```
+
+**Deployment note:** If you use a custom wrapper script, do not hardcode a path to a project-local `node_modules/` copy — that can leave you on an old version while `npm install -g` updates elsewhere. Prefer the global binary (`which salesforce`), `npx salesforce-crm-cli`, or resolve dynamically:
+
+```bash
+node "$(npm root -g)/salesforce-crm-cli/dist/index.js" --version
+```
+
+To upgrade:
+
+```bash
+npm install -g salesforce-crm-cli@latest
+```
+
 ---
 
 ## Authentication
@@ -92,7 +114,7 @@ Each object has 7 commands: `list`, `get`, `create`, `update`, `delete`, `search
 
 | Group | Salesforce Object | Key Fields |
 |-------|------------------|------------|
-| `accounts` | Account | Name, Type, Industry, Phone, Website, AnnualRevenue |
+| `accounts` | Account | Name, Type, Industry, Phone, Website, NumberOfEmployees |
 | `contacts` | Contact | FirstName, LastName, Email, Phone, Title, AccountId |
 | `leads` | Lead | FirstName, LastName, Company, Email, Status, LeadSource |
 | `opportunities` | Opportunity | Name, StageName, Amount, CloseDate, AccountId |
@@ -110,6 +132,8 @@ salesforce leads create --first-name "Jane" --last-name "Doe" --company "Acme" -
 salesforce opportunities update 006xx000001TNEAAA4 --stage "Closed Won" --amount "75000"
 salesforce accounts describe --pretty
 ```
+
+> **Org compatibility:** Default `list` and `search --where` fields avoid edition-specific columns (e.g. `AnnualRevenue` is not in the default set — it is unavailable on some Professional Edition orgs). Use `--fields` to request specific columns, or `describe` to see what your org supports. `AnnualRevenue` is still available on create/update via `--annual-revenue` when your org has the field.
 
 ### Query & Search
 
@@ -146,9 +170,12 @@ For mass data operations (200+ records):
 # Create an ingest job
 salesforce bulk ingest-create --sobject Account --operation insert
 
-# Upload CSV
+# Upload CSV (inline or from file)
 salesforce bulk ingest-upload --job-id 7500x000000xxxxAAA \
   --csv "Name,Industry\nAcme Corp,Technology\nGlobex Inc,Finance"
+
+salesforce bulk ingest-upload --job-id 7500x000000xxxxAAA \
+  --csv-file ./accounts.csv
 
 # Process the job
 salesforce bulk ingest-close --job-id 7500x000000xxxxAAA
@@ -198,13 +225,19 @@ salesforce composite collection --method create --records '[
 
 ```bash
 salesforce reports list --pretty
-salesforce reports get 00Oxx0000001AAAAAA
-salesforce reports run 00Oxx0000001AAAAAA --pretty
+salesforce reports get 00Oxx0000001AAAAAA          # metadata / describe
+salesforce reports run 00Oxx0000001AAAAAA --pretty   # no --filters needed
+salesforce reports run 00Oxx0000001AAAAAA \
+  --filters '[{"column":"ACCOUNT_NAME","operator":"contains","value":"Acme"}]'
 salesforce reports dashboards-list
 salesforce reports dashboards-get 01Zxx0000001AAAAAA
 ```
 
+> **Note:** `reports run` without `--filters` uses a GET request and runs the report with its saved metadata. Pass `--filters` when you need runtime filter overrides.
+
 ### Apex
+
+> **Edition requirement:** `apex execute`, `apex test-run`, and related Apex tooling require a Salesforce org with Apex enabled (Developer, Enterprise, Unlimited, etc.). Professional Edition orgs return *"Apex compilation not enabled for this organization"* — that is an org limitation, not a CLI error.
 
 ```bash
 # Execute anonymous Apex
@@ -510,6 +543,18 @@ SELECT Id FROM Contact WHERE AccountId IN (SELECT Id FROM Account WHERE Industry
 - **@modelcontextprotocol/sdk** — MCP server
 - **tsup** — build, **tsx** — dev, **vitest** — tests
 - **Node 18+**
+
+---
+
+## Changelog
+
+### 0.1.4
+
+- **Fix:** `accounts list` and `accounts search --where` — removed `AnnualRevenue` from default list fields (not available on all org editions)
+- **Fix:** `reports run` without `--filters` — uses GET instead of POST with an empty body
+- **Add:** Token refresh support via refresh token + connected app credentials
+- **Add:** MCP `salesforce_login`, `salesforce_logout`, and `salesforce_status` diagnostic tools
+- **Add:** `bulk ingest-upload --csv-file <path>` for file-based CSV uploads
 
 ---
 
